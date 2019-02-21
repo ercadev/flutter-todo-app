@@ -88,21 +88,16 @@ class _TodoManagerState extends State<TodoManager> {
                     Divider(),
                     Expanded(
                         child: Container(
-                            margin: EdgeInsets.all(5.0),
-                            child: TodoList(_todos, _removeTodo, _editTodo))),
+                            margin: EdgeInsets.only(left: 5.0, right: 5.0),
+                            child: TodoList())),
                   ]),
               Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     Expanded(
                         child: Container(
-                      margin: EdgeInsets.all(5.0),
-                      child: _doneTodos.length > 0
-                          ? new FinishedTodoList(_doneTodos, _removeTodo)
-                          : Center(
-                              child: Text("No todos found, lets add one!"),
-                            ),
-                    )),
+                            margin: EdgeInsets.all(5.0),
+                            child: FinishedTodoList())),
                   ])
             ]))
         // This trailing comma makes auto-formatting nicer for build methods.
@@ -141,14 +136,11 @@ class TodoAdder extends StatelessWidget {
                 textColor: Colors.white,
                 elevation: 0.0,
                 onPressed: () {
-                  if (_controller.text != '') {
-                    var todo = new Todo();
-                    todo.title = _controller.text;
-                    todo.done = false;
-                    addTodo(todo);
-
-                    _controller.clear();
-                  }
+                  Firestore.instance
+                      .collection('todos')
+                      .document()
+                      .setData({'title': _controller.text, 'done': false});
+                  _controller.clear();
                 },
                 child: Text("Add Task"))
           ],
@@ -157,11 +149,6 @@ class TodoAdder extends StatelessWidget {
 }
 
 class TodoList extends StatelessWidget {
-  final List<Todo> todolist;
-  final Function removeTodo;
-  final Function editTodo;
-  TodoList(this.todolist, this.removeTodo, this.editTodo);
-
   @override
   Widget build(BuildContext context) {
     return StreamBuilder(
@@ -178,26 +165,17 @@ class TodoList extends StatelessWidget {
 }
 
 class FinishedTodoList extends StatelessWidget {
-  final List<Todo> todolist;
-  final Function removeTodo;
-  FinishedTodoList(this.todolist, this.removeTodo);
-
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      children: todolist
-          .map((todo) => Card(
-                  child: Container(
-                margin: EdgeInsets.only(
-                    left: 10.0, right: 10.0, top: 20.0, bottom: 20.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: <Widget>[
-                    Text(todo.title),
-                  ],
-                ),
-              )))
-          .toList(),
+    return StreamBuilder(
+      stream: Firestore.instance
+          .collection('todos')
+          .where('done', isEqualTo: true)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return CircularProgressIndicator();
+        return _todoList(context, snapshot.data.documents);
+      },
     );
   }
 }
@@ -206,7 +184,7 @@ Widget _todoItem(BuildContext context, DocumentSnapshot data) {
   final record = Record.fromSnapshot(data);
   return Card(
       child: Container(
-    margin: EdgeInsets.only(left: 10.0, right: 10.0, top: 5.0, bottom: 5.0),
+    margin: EdgeInsets.only(left: 10.0, right: 10.0, bottom: 5.0),
     child: Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: <Widget>[
@@ -216,11 +194,15 @@ Widget _todoItem(BuildContext context, DocumentSnapshot data) {
             IconButton(
               color: Colors.green,
               icon: Icon(Icons.check_circle),
-              onPressed: () {},
+              onPressed: () {
+                record.reference.updateData({'done': true});
+              },
             ),
             IconButton(
               color: Colors.red,
-              onPressed: () {},
+              onPressed: () {
+                record.reference.delete();
+              },
               icon: Icon(Icons.cancel),
             )
           ],
@@ -232,7 +214,7 @@ Widget _todoItem(BuildContext context, DocumentSnapshot data) {
 
 Widget _todoList(BuildContext context, List<DocumentSnapshot> snapshot) {
   return ListView(
-    padding: const EdgeInsets.only(top: 20.0),
+    padding: const EdgeInsets.only(),
     children: snapshot.map((data) => _todoItem(context, data)).toList(),
   );
 }
