@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 void main() => runApp(MyApp());
 
@@ -87,13 +88,8 @@ class _TodoManagerState extends State<TodoManager> {
                     Divider(),
                     Expanded(
                         child: Container(
-                      margin: EdgeInsets.all(5.0),
-                      child: _todos.length > 0
-                          ? new TodoList(_todos, _removeTodo, _editTodo)
-                          : Center(
-                              child: Text("No todos found, lets add one!"),
-                            ),
-                    )),
+                            margin: EdgeInsets.all(5.0),
+                            child: TodoList(_todos, _removeTodo, _editTodo))),
                   ]),
               Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -168,38 +164,15 @@ class TodoList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      children: todolist
-          .map((todo) => Card(
-                  child: Container(
-                margin: EdgeInsets.only(
-                    left: 10.0, right: 10.0, top: 5.0, bottom: 5.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: <Widget>[
-                    Text(todo.title),
-                    Row(
-                      children: <Widget>[
-                        IconButton(
-                          color: Colors.green,
-                          icon: Icon(Icons.check_circle),
-                          onPressed: () {
-                            editTodo(todo);
-                          },
-                        ),
-                        IconButton(
-                          color: Colors.red,
-                          onPressed: () {
-                            removeTodo(todo);
-                          },
-                          icon: Icon(Icons.cancel),
-                        )
-                      ],
-                    )
-                  ],
-                ),
-              )))
-          .toList(),
+    return StreamBuilder(
+      stream: Firestore.instance
+          .collection('todos')
+          .where('done', isEqualTo: false)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return CircularProgressIndicator();
+        return _todoList(context, snapshot.data.documents);
+      },
     );
   }
 }
@@ -227,4 +200,57 @@ class FinishedTodoList extends StatelessWidget {
           .toList(),
     );
   }
+}
+
+Widget _todoItem(BuildContext context, DocumentSnapshot data) {
+  final record = Record.fromSnapshot(data);
+  return Card(
+      child: Container(
+    margin: EdgeInsets.only(left: 10.0, right: 10.0, top: 5.0, bottom: 5.0),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: <Widget>[
+        Text(record.title),
+        Row(
+          children: <Widget>[
+            IconButton(
+              color: Colors.green,
+              icon: Icon(Icons.check_circle),
+              onPressed: () {},
+            ),
+            IconButton(
+              color: Colors.red,
+              onPressed: () {},
+              icon: Icon(Icons.cancel),
+            )
+          ],
+        )
+      ],
+    ),
+  ));
+}
+
+Widget _todoList(BuildContext context, List<DocumentSnapshot> snapshot) {
+  return ListView(
+    padding: const EdgeInsets.only(top: 20.0),
+    children: snapshot.map((data) => _todoItem(context, data)).toList(),
+  );
+}
+
+class Record {
+  final String title;
+  final bool done;
+  final DocumentReference reference;
+
+  Record.fromMap(Map<String, dynamic> map, {this.reference})
+      : assert(map['title'] != null),
+        assert(map['done'] != null),
+        title = map['title'],
+        done = map['done'];
+
+  Record.fromSnapshot(DocumentSnapshot snapshot)
+      : this.fromMap(snapshot.data, reference: snapshot.reference);
+
+  @override
+  String toString() => "Record<$title:$done>";
 }
